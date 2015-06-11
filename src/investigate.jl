@@ -2,7 +2,7 @@ using DWARF
 
 tag_filter(which_tag, arr) = filter(x->DWARF.tag(x) == which_tag, arr)
 
-function investigate2(oh; dumpsource = false, dumpdies = false)
+function investigate2(oh; dumpsource = false, dumpdies = false, dumploctables = false)
     sects = ELF.Sections(oh)
 
     # Relocate the object file
@@ -30,7 +30,7 @@ function investigate2(oh; dumpsource = false, dumpdies = false)
     if dumpsource
         for i = 1:length(llvmf)
             print(Base.uncompressed_ast(juliaf[i]).args[3])
-            dump(llvmf[i])
+            icxx" $(llvmf[i])->getParent()->dump(); "
         end
     end
     for i = 1:length(juliaf)
@@ -51,6 +51,12 @@ function investigate2(oh; dumpsource = false, dumpdies = false)
             for var in lvars
                 println(" - ",var[1])
             end
+        end
+    end
+    if dumploctables
+        seek(oh, sectionoffset(dbgs.debug_loc))
+        while position(oh) < sectionoffset(dbgs.debug_loc)+sectionsize(dbgs.debug_loc)
+            show(read(oh, DWARF.LocationList{UInt64}))
         end
     end
     text = first(filter(x->sectionname(x)==".text",ELF.Sections(oh)))
