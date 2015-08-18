@@ -1,10 +1,19 @@
+#ifndef FUNCTIONMOVER_CPP
+#define FUNCTIONMOVER_CPP
+
 #include "llvm/Transforms/Utils/ValueMapper.h"
 #include "llvm/Transforms/Utils/Cloning.h"
+#include "llvm/IR/DebugInfo.h"
 
 using namespace llvm;
 extern ExecutionEngine *jl_ExecutionEngine;
 extern std::map<Value *, void*> llvm_to_jl_value;
 extern TargetMachine *jl_TargetMachine;
+
+llvm::LLVMContext &jl_LLVMContext = llvm::getGlobalContext();
+extern "C" {
+    extern void jl_error(const char *str);
+}
 
 class FunctionMover2 : public ValueMaterializer
 {
@@ -30,16 +39,16 @@ public:
             DestI->setName(I->getName());    // Copy the name over...
             this->VMap[I] = DestI++;        // Add mapping to VMap
         }
- 
+
         // Necessary in case the function is self referential
         this->VMap[toClone] = NewF;
 
         // Clone and record the subprogram
         CloneDebugInfoMetadata(NewF, toClone, this->VMap);
- 
+
         SmallVector<ReturnInst*, 8> Returns;
         llvm::CloneFunctionInto(NewF,toClone,this->VMap,true,Returns,"",NULL,NULL,this);
- 
+
         return NewF;
     }
 
@@ -141,11 +150,11 @@ public:
         return NULL;
     };
 };
- 
+
 llvm::Value *MapFunction(llvm::Function *f, FunctionMover2 *mover)
 {
     llvm::Value *ret = llvm::MapValue(f,mover->VMap,llvm::RF_None,nullptr,mover);
     mover->finalize();
     return ret;
 }
-
+#endif //FUNCTIONMOVER_CPP

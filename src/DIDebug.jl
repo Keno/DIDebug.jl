@@ -41,13 +41,6 @@ cxx"""
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCInst.h"
 using namespace llvm;
-
-llvm::LLVMContext &jl_LLVMContext = llvm::getGlobalContext();
-extern "C" {
-    extern void jl_error(const char *str);
-    extern llvm::ExecutionEngine *jl_ExecutionEngine;
-    extern llvm::TargetMachine *jl_TargetMachine;
-}
 """
 
 cxxparse(readall(Pkg.dir("DIDebug","src","FunctionMover.cpp")))
@@ -102,7 +95,7 @@ static llvm::object::OwningBinary<llvm::object::ObjectFile>
 emitObject(llvm::TargetMachine *TM, llvm::Module *M) {
   llvm::legacy::PassManager PM;
 
-  M->setDataLayout(*TM->getDataLayout());
+  M->setDataLayout(TM->createDataLayout());
 
   // The RuntimeDyld will take ownership of this shortly
   llvm::SmallVector<char, 4096> ObjBufferSV;
@@ -116,8 +109,6 @@ emitObject(llvm::TargetMachine *TM, llvm::Module *M) {
 
   // Initialize passes.
   PM.run(*M);
-  // Flush the output buffer to get the generated code into memory
-  ObjStream.flush();
 
   std::unique_ptr<llvm::MemoryBuffer> CompiledObjBuffer(
                                 new llvm::ObjectMemoryBuffer(std::move(ObjBufferSV)));
@@ -132,7 +123,7 @@ emitObject(llvm::TargetMachine *TM, llvm::Module *M) {
 static std::unique_ptr<llvm::RuntimeDyld::LoadedObjectInfo>
 loadObject(llvm::ExecutionEngine *EE, llvm::object::OwningBinary<llvm::object::ObjectFile> Obj)
 {
-  return ((llvm::MCJIT*)EE)->LoadObjectFile(std::move(Obj));
+    return std::unique_ptr<llvm::RuntimeDyld::LoadedObjectInfo>{nullptr}; // ((llvm::MCJIT*)EE)->addObjectFile(std::move(Obj));
 }
 
 static std::unique_ptr<llvm::RuntimeDyld::LoadedObjectInfo>
@@ -161,7 +152,7 @@ legacy::PassManager *createPassManager(LLVMTargetMachine *TM,
   // Targets may override createPassConfig to provide a target-specific
   // subclass.
   TargetPassConfig *PassConfig = TM->createPassConfig(*PM);
-  PassConfig->setStartStopPasses(nullptr, StopAfter);
+  PassConfig->setStartStopPasses(nullptr, nullptr, StopAfter);
 
   // Set PassConfig options provided by TargetMachine.
   PassConfig->setDisableVerify(false);

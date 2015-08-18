@@ -128,24 +128,27 @@ function loclist2rangelist{T}(list::DWARF.LocationList{T})
   rangelist
 end
 
-function rangelists(oh)
-  dbgs = debugsections(oh)
-  seek(oh, sectionoffset(dbgs.debug_loc))
+function rangelists(dbgs)
+  seek(dbgs.oh, sectionoffset(dbgs.debug_loc))
   lists = Array(Vector{UnitRange{UInt64}},0)
-  while position(oh) < sectionoffset(dbgs.debug_loc)+sectionsize(dbgs.debug_loc)
-      push!(lists,loclist2rangelist(read(oh, DWARF.LocationList{UInt64})))
+  while position(dbgs.oh) < sectionoffset(dbgs.debug_loc)+sectionsize(dbgs.debug_loc)
+      push!(lists,loclist2rangelist(read(dbgs.oh, DWARF.LocationList{UInt64})))
   end
   lists
 end
 
+function rangelist(dbgs, offset)
+    seek(dbgs.oh, sectionoffset(dbgs.debug_loc)+offset)
+    loclist2rangelist(read(dbgs.oh, DWARF.LocationList{UInt64}))
+end
+
 default_colors = [:blue, :red, :green, :yellow, :purple]
-function disassemble2(base, size; ctx = DisAsmContext(), rangelists = [], colors = default_colors)
-  data = pointer_to_array(convert(Ptr{UInt8},base), (size,), false)
-  Offset = 0
-  io = STDOUT
-  while Offset < sizeof(data)
+function disassemble2(data::Vector{UInt8}, instrange = nothing; io = STDOUT,
+    ctx = DisAsmContext(), rloffset = 0, rangelists = [], colors = default_colors, offset = 0)
+  Offset = instrange !== nothing ? first(instrange) - offset : 0
+  while Offset < sizeof(data) && (instrange === nothing || Offset <= last(instrange)-offset)
     (Inst, InstSize) = getInstruction(data, Offset)
-    print(io,"0x",hex(Offset,2*sizeof(Offset)))
+    print(io,"0x",hex(Offset+offset,2*sizeof(Offset)))
     print(io,":")
     str = repr(Inst; ctx = ctx)
     # This is bad, but I need things to line up
@@ -161,15 +164,16 @@ function disassemble2(base, size; ctx = DisAsmContext(), rangelists = [], colors
     for (i,rangelist) in enumerate(rangelists)
       print(io," ")
       found = false
+      color = colors[mod1(i,length(colors))]
       for range in rangelist
         # If this is the start of a range
-        if Offset == first(range)
-          print_with_color(colors[i],io,"x")
+        if Offset+offset == first(range)+rloffset
+          print_with_color(color,io,"x")
         # Or the last
-        elseif last(range) == Offset+InstSize
-          print_with_color(colors[i],io,"x")
-        elseif first(range) <= Offset < last(range)
-          print_with_color(colors[i],io,"|")
+        elseif last(range)+rloffset == Offset+offset+InstSize
+          print_with_color(color,io,"x")
+        elseif first(range)+rloffset <= Offset + offset < last(range)+rloffset
+          print_with_color(color,io,"|")
         else
           continue
         end
@@ -183,6 +187,11 @@ function disassemble2(base, size; ctx = DisAsmContext(), rangelists = [], colors
     Offset += InstSize
   end
 end
+function disassemble2(base, size; kwargs...)
+    data = pointer_to_array(convert(Ptr{UInt8},base), (size,), false)
+    disassemble2(data; kwargs...)
+end
+
 
 function disassemble(base, size, ctx = DisAsmContext())
   icxx"""
