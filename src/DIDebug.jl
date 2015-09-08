@@ -19,6 +19,7 @@ cxx"""
 #include "llvm/ExecutionEngine/ObjectMemoryBuffer.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/DiagnosticPrinter.h"
 #include "llvm/CodeGen/Passes.h"
 #include "ExecutionEngine/MCJIT/MCJIT.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
@@ -75,6 +76,26 @@ function parseIR(str)
             jl_error(stream.str().c_str());
         }
         return mod.release();
+    """
+end
+
+function parseBitcode(str)
+    icxx"""
+        std::string Message;
+        raw_string_ostream Stream(Message);
+        DiagnosticPrinterRawOStream DP(Stream);
+        ErrorOr<std::unique_ptr<Module>> ModuleOrErr = llvm::parseBitcodeFile(
+            llvm::MemoryBufferRef(
+            llvm::StringRef($(pointer(str)),$(sizeof(str))),
+            llvm::StringRef("<in-memory>")),
+            jl_LLVMContext, [&](const DiagnosticInfo &DI) { DI.print(DP); });
+
+        if (ModuleOrErr.getError()) {
+            Stream.flush();
+            jl_error(Message.c_str());
+        }
+
+        return ModuleOrErr.get().release();
     """
 end
 

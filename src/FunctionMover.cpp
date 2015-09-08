@@ -7,7 +7,7 @@
 
 using namespace llvm;
 extern ExecutionEngine *jl_ExecutionEngine;
-extern std::map<Value *, void*> llvm_to_jl_value;
+extern std::map<Value *, void*> jl_llvm_to_jl_value;
 extern TargetMachine *jl_TargetMachine;
 
 llvm::LLVMContext &jl_LLVMContext = llvm::getGlobalContext();
@@ -30,7 +30,7 @@ public:
     llvm::Function *clone_llvm_function2(llvm::Function *toClone)
     {
         Function *NewF = Function::Create(toClone->getFunctionType(),
-                                          Function::PrivateLinkage,
+                                          toClone->getLinkage(),
                                           toClone->getName(),
                                           this->destModule);
         ClonedCodeInfo info;
@@ -103,7 +103,7 @@ public:
             }
             if ((F->isDeclaration() || F->getParent() != destModule) && copyDependencies) {
                 // Try to find the function in any of the modules known to MCJIT
-                Function *shadow = jl_ExecutionEngine->FindFunctionNamed(F->getName().str().c_str());
+                Function *shadow = NULL;// jl_ExecutionEngine->FindFunctionNamed(F->getName().str().c_str());
                 if (shadow != NULL && !shadow->isDeclaration()) {
                     Function *oldF = destModule->getFunction(F->getName());
                     if (oldF)
@@ -136,8 +136,8 @@ public:
             if (GV->isDeclaration())
                 return newGV;
             std::map<Value*, void *>::iterator it;
-            it = llvm_to_jl_value.find(GV);
-            if (it != llvm_to_jl_value.end()) {
+            it = jl_llvm_to_jl_value.find(GV);
+            if (it != jl_llvm_to_jl_value.end()) {
                 newGV->setInitializer(Constant::getIntegerValue(GV->getType()->getElementType(),APInt(sizeof(void*)*8,(intptr_t)it->second)));
                 newGV->setConstant(true);
             }

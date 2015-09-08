@@ -42,9 +42,9 @@ function process_cus(dbgs::DebugSections, strtab)
             for at in DWARF.attributes(SP)
                 tag = DWARF.tag(at)
                 if tag == DWARF.DW_AT_low_pc
-                    low = convert(UInt,at)
+                    sp_low = convert(UInt,at)
                 elseif tag == DWARF.DW_AT_high_pc
-                    high = convert(UInt,at)
+                    sp_high = convert(UInt,at)
                 elseif tag == DWARF.DW_AT_linkage_name ||
                        tag == DWARF.DW_AT_MIPS_linkage_name
                     linkage_name = bytestring(at,strtab)
@@ -64,7 +64,7 @@ function process_cus(dbgs::DebugSections, strtab)
                 end
                 return 0
             end
-            Subprogram(name, linkage_name, low, high, variables)
+            Subprogram(name, linkage_name, sp_low, sp_high, variables)
         end
         CompilationUnit(subprograms, low, high)
     end
