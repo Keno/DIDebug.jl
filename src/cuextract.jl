@@ -11,6 +11,7 @@ immutable Subprogram
     linkage_name::AbstractString
     low_pc::UInt
     high_pc::UInt
+    fbreg::UInt
     variables::Dict
 end
 
@@ -27,7 +28,7 @@ function process_cus(debugoh)
 end
 
 function process_SP(SP, strtab)
-    sp_low = (-1 % UInt); sp_high = 0
+    sp_low = (-1 % UInt); sp_high = 0; fbreg = (-1 % UInt)
     linkage_name = ""; name = ""
     for at in DWARF.attributes(SP)
         tag = DWARF.tag(at)
@@ -38,19 +39,21 @@ function process_SP(SP, strtab)
         elseif tag == DWARF.DW_AT_linkage_name ||
                tag == DWARF.DW_AT_MIPS_linkage_name
             linkage_name = bytestring(at,strtab)
+        elseif tag == DWARF.DW_AT_frame_base
+            # Simple for now
+            fbreg = at.content[1]-DWARF.DW_OP_reg0
         elseif tag == DWARF.DW_AT_name
             name = bytestring(at,strtab)
         end
     end
-    variables = Dict{Symbol,UInt}()
+    variables = Dict{Symbol,Any}()
     for v in SP.children
         name = nothing
-        value::UInt = 0
+        value = 0
         for at in DWARF.attributes(v)
             tag = DWARF.tag(at)
             if tag == DWARF.DW_AT_location
-                value = isa(at,DWARF.Attributes.BlockAttribute) ?
-                    (-1 % UInt) : convert(UInt,at)
+                value = at
             elseif tag == DWARF.DW_AT_const_value
                 value = (-1 % UInt)
             elseif tag == DWARF.DW_AT_name
@@ -61,7 +64,7 @@ function process_SP(SP, strtab)
             variables[symbol(name)] = value
         end
     end
-    Subprogram(name, linkage_name, sp_low, sp_high, variables)    
+    Subprogram(name, linkage_name, sp_low, sp_high, fbreg, variables)    
 end
 
 function process_tree(tree, strtab)
