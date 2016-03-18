@@ -27,7 +27,8 @@ function process_cus(debugoh)
     process_cus(dbgs, strtab)
 end
 
-function process_SP(SP, strtab)
+function process_SP(curef, SP, strtab, cache)
+    @show SP
     sp_low = (-1 % UInt); sp_high = 0; fbreg = (-1 % UInt)
     linkage_name = ""; name = ""
     for at in DWARF.attributes(SP)
@@ -50,21 +51,30 @@ function process_SP(SP, strtab)
     for v in SP.children
         name = nothing
         value = 0
-        for at in DWARF.attributes(v)
+        attrs = DWARF.attributes(v)
+        for at in attrs
             tag = DWARF.tag(at)
+            @show tag
             if tag == DWARF.DW_AT_location
                 value = at
             elseif tag == DWARF.DW_AT_const_value
                 value = (-1 % UInt)
             elseif tag == DWARF.DW_AT_name
                 name = bytestring(at, strtab)
+            elseif tag == DWARF.DW_AT_abstract_origin
+                offset = convert(UInt, at)
+                seek(cu.io,cu.offset+offset)
+                abbrev = read(io, ULEB128)
+                new_attrs = DWARF.attributes(DWARF.realize(LightDIERef(cu.io,cu.cu,position(cu.io),cache.spec_cache[abbrev])))
+                @show new_attrs
+                append!(attrs, new_attrs)
             end
         end
         if name !== nothing
             variables[symbol(name)] = value
         end
     end
-    Subprogram(name, linkage_name, sp_low, sp_high, fbreg, variables)    
+    Subprogram(name, linkage_name, sp_low, sp_high, fbreg, variables)
 end
 
 function process_tree(tree, strtab)
@@ -80,7 +90,7 @@ function process_tree(tree, strtab)
     subprograms = map(tag_filter(DWARF.DW_TAG_subprogram,tree.children)) do SP
         process_SP(SP, strtab)
     end
-    CompilationUnit(subprograms, low, high)  
+    CompilationUnit(subprograms, low, high)
 end
 process_tree(tree::DWARF.DIETreeRef) = process_tree(tree.tree, tree.strtab)
 
